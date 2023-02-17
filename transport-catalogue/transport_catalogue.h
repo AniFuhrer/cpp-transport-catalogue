@@ -33,44 +33,15 @@ struct Bus {
 class TransportCatalogue{
 public:
 
-    void AddStop(const Stop& stop) {
-        stop_.push_back(stop);
-        stops_[stop.name] = &(stop_.back());
-    }
+    void AddStop(const Stop& stop);
 
-    const Stop* GetStop(const std::string& str) {
-        if (stops_.count(str) == 0) {
-            return nullptr;
-        }
-        return stops_.at(str);
-    }
+    const Stop* GetStop(const std::string& str);
 
-    void AddBus(const Bus& bus) {
-        //std::cout << "Trying to add a bus ..." << std::endl;
-        //std::cout << bus.name << std::endl;
-        bus_.push_back(bus);
-        //std::cout << "Bus added to deque successful ..." << std::endl;
-        buses_[bus.name] = &(bus_.back());
-    }
+    void AddBus(const Bus& bus);
 
-    const Bus* GetBus(const std::string& str) {
-        if (buses_.count(str) == 0) {
-            return nullptr;
-        }
-        return buses_.at(str);
-    }
+    const Bus* GetBus(const std::string& str);
 
-    std::set<std::string> GetAllBusesForStop(const std::string& stop) {
-        std::set<std::string> buses;
-        for(const auto& bus : bus_) {
-            for(const auto& s : bus.unique_stops) {
-                if(s->name == stop) {
-                    buses.insert(bus.name);
-                }
-            }
-        }
-        return buses;
-    }
+    std::set<std::string> GetAllBusesForStop(const std::string& stop);
 
 private:
     std::unordered_map<std::string, const Bus*> buses_;

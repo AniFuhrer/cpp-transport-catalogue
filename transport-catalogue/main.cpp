@@ -6,14 +6,10 @@ using namespace std;
 
 int main() {
     TransportCatalogue bus_catalogue;
-    int operations_count_to_input = ReadLineWithNumber();
     vector<BusCommand*> bus_commands;
     vector<StopCommand*> stop_commands;
 
-    for (int i = 0; i < operations_count_to_input; ++i){
-        //input bus_/bus_stop info
-        ParseLine(ReadLine(), bus_commands, stop_commands, &bus_catalogue);
-    }
+    InputCatalogue(ReadLineWithNumber(cin), bus_commands, stop_commands, &bus_catalogue, cin);
 
     for (auto stop_command : stop_commands) {
         bus_catalogue.AddStop(stop_command->Parse());
@@ -23,10 +19,6 @@ int main() {
         bus_catalogue.AddBus(bus_command->Parse());
     }
 
-    int operations_count_to_output = ReadLineWithNumber();
-    for (int i = 0; i < operations_count_to_output; ++i){
-        //output bus_ info
-        OutputInfo(ReadLine(), &bus_catalogue);
-    }
+    OutputCatalogue(ReadLineWithNumber(cin), &bus_catalogue, cout, cin);
 }
 
