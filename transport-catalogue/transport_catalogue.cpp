@@ -1,7 +1,5 @@
 #include "transport_catalogue.h"
 
-#include <utility>
-
 using namespace std;
 
 // -----    TransportCatalogue  ----- start
@@ -33,8 +31,20 @@ const Bus* TransportCatalogue::GetBus(const std::string& str) {
     return buses_.at(str);
 }
 
-std::set<std::string> TransportCatalogue::GetAllBusesForStop(const std::string& stop) {
-    std::set<std::string> buses;
+vector<Bus> TransportCatalogue::GetAllBuses() {
+    vector<Bus> buses;
+    for (const auto& bus : bus_) {
+        buses.push_back(bus);
+    }
+
+    std::sort(buses.begin(), buses.end(), [](const Bus& lhs, const Bus& rhs) {
+        return lhs.name < rhs.name;
+    });
+    return buses;
+}
+
+set<string> TransportCatalogue::GetAllBusesForStop(const string& stop) {
+    set<std::string> buses;
     for(const auto& bus : bus_) {
         for(const auto& s : bus.unique_stops) {
             if(s->name == stop) {
@@ -45,58 +55,41 @@ std::set<std::string> TransportCatalogue::GetAllBusesForStop(const std::string& 
     return buses;
 }
 
-// -----    TransportCatalogue  ----- end
-
-string utils::GetToken(const string& str, int& pos, char to_find){
-    if (pos >= str.length()){
-        return "";
-    }
-    int first_pos = pos;
-    auto ret_pos = str.find(to_find, first_pos);
-    if (ret_pos == string::npos) {
-        ret_pos = str.length();
-    }
-    pos = ret_pos + 2;
-    return str.substr(first_pos, ret_pos - first_pos);
+void TransportCatalogue::AddCoordinates(const geo::Coordinates& coordinates) {
+    coordinates_.push_back(coordinates);
 }
 
-//Marushkino: 55.595884, 37.209755
+std::vector<geo::Coordinates> TransportCatalogue::GetAllCoordinates() {
+    return coordinates_;
+}
 
-StopCommand::StopCommand(string  str)
-    :to_parse(std::move(str)) {
+
+// -----    TransportCatalogue  ----- end
+
+StopCommand::StopCommand(const json::Node* node)
+        :to_parse(node) {
 }
 
 Stop StopCommand::Parse() {
     Stop stop;
-    int pos = 0;
-    stop.name = utils::GetToken(to_parse, pos, ':');
+    stop.name = to_parse->AsMap().at("name").AsString();
     //cout << "Stop " + stop.name << ": " ;
-    stop.coordinates.lat = stod (utils::GetToken(to_parse, pos, ','));
-    //cout << setprecision(9) << stop.coordinates.lat << " --- " ;
-    stop.coordinates.lng = stod (utils::GetToken(to_parse, pos, ','));
-    //cout << setprecision(9) << stop.coordinates.lng << endl;
+    stop.coordinates.lat = to_parse->AsMap().at("latitude").AsDouble();
+    stop.coordinates.lng = to_parse->AsMap().at("longitude").AsDouble();
+
     //cout << stop.name << ":  " <<stop.coordinates.lat << "  " << stop.coordinates.lng << endl;
-    string help = (utils::GetToken(to_parse, pos, 'm'));
-    double dist = stod(help.empty() ? "0" : help);
-    if (dist == 0) {
+    if (to_parse->AsMap().empty()){
         return stop;
     }
-    string s = (utils::GetToken(to_parse, pos, ',')).substr(3);
-    while(!s.empty()){
-        stop.distance_to_other_stops[s] = dist;
-        s = (utils::GetToken(to_parse, pos, 'm')); //find distance
-        if(s.empty()){
-            break;
-        }
-        dist = stod(s);
-        s = (utils::GetToken(to_parse, pos, ',')).substr(3);
+    for(const auto& road_distances : to_parse->AsMap().at("road_distances").AsMap()) {
+        stop.distance_to_other_stops[road_distances.first] = road_distances.second.AsDouble();
     }
     return stop;
 }
 
-BusCommand::BusCommand(string  str, TransportCatalogue* catalogue)
-    :to_parse(std::move(str)),
-    catalogue_(catalogue) {
+BusCommand::BusCommand(const json::Node* node, TransportCatalogue* catalogue)
+        :to_parse(node),
+         catalogue_(catalogue) {
 }
 
 //256: Biryulyovo Zapadnoye > Biryusinka > Universam > Biryulyovo Tovarnaya > Biryulyovo Passazhirskaya > Biryulyovo Zapadnoye
@@ -106,22 +99,17 @@ Bus BusCommand::Parse() {
     //cout << "Starting parse a bus ..." << endl;
     //cout << to_parse << endl;
     Bus bus;
-    int pos = 0;
     const Stop* st;
     const Stop* past_st = nullptr;
-    bus.name = utils::GetToken(to_parse, pos, ':');
+    bus.name = to_parse->AsMap().at("name").AsString();
     //cout << "First token completed ..." << "  Bus name: " + bus.name << endl;
-    bool circle = to_parse.find('>') != string::npos;
-    //cout << pos << endl;
+    bool circle = to_parse->AsMap().at("is_roundtrip").AsBool();
     if (circle) {
         //cout << "Starting circle route ..." << endl;
-        string s = string (utils::GetToken(to_parse, pos, '>'));
-        while (!s.empty()) {
-            if(s.back() == ' '){
-                s.erase(s.length()-1);
-            }
-            st = catalogue_->GetStop(s);
+        for (const auto& roundtrip : to_parse->AsMap().at("stops").AsArray()) {
+            st = catalogue_->GetStop(roundtrip.AsString());
             bus.unique_stops.insert(st);
+            bus.stops_list.push_back(st);
             bus.stops_count += 1;
             if (past_st != nullptr){
                 bus.dist += ComputeDistance(past_st->coordinates, st->coordinates);
@@ -129,23 +117,16 @@ Bus BusCommand::Parse() {
                     bus.route_length += past_st->distance_to_other_stops.at(st->name);
                 } else if (!past_st->distance_to_other_stops.count(st->name)){
                     bus.route_length += st->distance_to_other_stops.at(past_st->name);
-                } else {
-                    cout << "MISSED" << endl;
                 }
             }
             past_st = st;
-            s = utils::GetToken(to_parse, pos, '>');
         }
     } else {
         //cout << "Starting straight route ..." << endl;
-        string s = string (utils::GetToken(to_parse, pos, '-'));
-        //cout << "First token in straight route is completed ..." << endl;
-        while (!s.empty()) {
-            if(s.back() == ' '){
-                s.erase(s.length()-1);
-            }
-            st = catalogue_->GetStop(s);
+        for (const auto& stop : to_parse->AsMap().at("stops").AsArray()) {
+            st = catalogue_->GetStop(stop.AsString());
             bus.unique_stops.insert(st);
+            bus.stops_list.push_back(st);
             bus.stops_count += 1;
             if (past_st != nullptr){
                 bus.dist += ComputeDistance(past_st->coordinates, st->coordinates);
@@ -159,11 +140,13 @@ Bus BusCommand::Parse() {
                 }
             }
             past_st = st;
-            s = utils::GetToken(to_parse, pos, '-');
         }
         bus.stops_count *= 2;
         --bus.stops_count;
         bus.dist *= 2;
+        //    vec.insert(vec.end(), temp.begin(), temp.end());
+        vector<const Stop*> temp(bus.stops_list.rbegin() + 1, bus.stops_list.rend());
+        bus.stops_list.insert(bus.stops_list.end(), temp.begin(), temp.end());
         //cout << "Straight route completed ..." << endl;
     }
     bus.curvature = bus.route_length/bus.dist;
